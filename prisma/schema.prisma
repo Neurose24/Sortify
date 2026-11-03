@@ -1,8 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Get a free hosted Postgres database in seconds: `npx create-db`
-
 generator client {
   provider = "prisma-client"
   output   = "../generated/prisma"
@@ -10,4 +5,257 @@ generator client {
 
 datasource db {
   provider = "postgresql"
+}
+
+// ==========================================
+// ENUMS
+// ==========================================
+
+enum UserRole {
+  ADMIN
+  PETUGAS
+  SELLER
+}
+
+enum PackageStatus {
+  WAITING_RES
+  REGISTERED
+  SORTED
+}
+
+enum ImportBatchStatus {
+  PROCESSING
+  COMPLETED
+  COMPLETED_WITH_ERRORS
+  FAILED
+}
+
+enum ImportDetailStatus {
+  IMPORTED
+  UPDATED_RES
+  SKIPPED_SAME
+  SKIPPED_DUPLICATE_FILE
+  CONFLICT_ORDER_RES
+  CONFLICT_RES_USED
+  FAILED_EMPTY_ORDER
+  FAILED_INVALID
+}
+
+enum ScanMode {
+  AUTO
+  MANUAL
+}
+
+enum ScanResult {
+  SUCCESS
+  UNKNOWN_BARCODE
+  EXPEDITION_MISMATCH
+  PREFIX_UNRECOGNIZED
+  ALREADY_SCANNED
+  FAILED
+}
+
+// ==========================================
+// USERS
+// ==========================================
+
+model User {
+  id        String   @id @default(cuid())
+  name      String
+  email     String   @unique
+  password  String
+  role      UserRole @default(SELLER)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  sellerStores  SellerStore[]
+  importBatches ImportBatch[]
+  scanHistories ScanHistory[]
+}
+
+// ==========================================
+// MARKETPLACES
+// ==========================================
+
+model Marketplace {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  createdAt DateTime @default(now())
+
+  stores Store[]
+}
+
+// ==========================================
+// STORES
+// ==========================================
+
+model Store {
+  id            String   @id @default(cuid())
+  marketplaceId String
+  name          String
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  marketplace   Marketplace   @relation(fields: [marketplaceId], references: [id])
+  sellerStores  SellerStore[]
+  packages      Package[]
+  importBatches ImportBatch[]
+  scanHistories ScanHistory[]
+
+  @@unique([marketplaceId, name])
+  @@index([marketplaceId])
+}
+
+// ==========================================
+// SELLER STORE ASSIGNMENTS
+// ==========================================
+
+model SellerStore {
+  userId    String
+  storeId   String
+  createdAt DateTime @default(now())
+
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@id([userId, storeId])
+  @@index([storeId])
+}
+
+// ==========================================
+// EXPEDITIONS
+// ==========================================
+
+model Expedition {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  createdAt DateTime @default(now())
+
+  prefixRules PrefixRule[]
+  packages    Package[]
+
+  selectedScans ScanHistory[] @relation("SelectedExpedition")
+  detectedScans ScanHistory[] @relation("DetectedExpedition")
+}
+
+// ==========================================
+// PREFIX RULES
+// ==========================================
+
+model PrefixRule {
+  id           String   @id @default(cuid())
+  expeditionId String
+  prefix       String   @unique
+  createdAt    DateTime @default(now())
+
+  expedition Expedition @relation(fields: [expeditionId], references: [id], onDelete: Cascade)
+
+  @@index([expeditionId])
+}
+
+// ==========================================
+// PACKAGES
+// ==========================================
+
+model Package {
+  id           String        @id @default(cuid())
+  storeId      String
+  expeditionId String?
+  orderNumber  String
+  barcode      String?       @unique
+  status       PackageStatus @default(WAITING_RES)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  store      Store       @relation(fields: [storeId], references: [id])
+  expedition Expedition? @relation(fields: [expeditionId], references: [id])
+
+  importDetails ImportBatchDetail[]
+  scanHistories ScanHistory[]
+
+  @@unique([storeId, orderNumber])
+  @@index([storeId])
+  @@index([expeditionId])
+  @@index([status])
+}
+
+// ==========================================
+// IMPORT BATCHES
+// ==========================================
+
+model ImportBatch {
+  id           String            @id @default(cuid())
+  userId       String
+  storeId      String
+  fileName     String
+  totalRows    Int               @default(0)
+  totalSuccess Int               @default(0)
+  totalFailed  Int               @default(0)
+  totalSkipped Int               @default(0)
+  status       ImportBatchStatus @default(PROCESSING)
+  createdAt    DateTime          @default(now())
+  finishedAt   DateTime?
+
+  user    User                @relation(fields: [userId], references: [id])
+  store   Store               @relation(fields: [storeId], references: [id])
+  details ImportBatchDetail[]
+
+  @@index([userId])
+  @@index([storeId])
+  @@index([createdAt])
+}
+
+// ==========================================
+// IMPORT BATCH DETAILS
+// ==========================================
+
+model ImportBatchDetail {
+  id          String             @id @default(cuid())
+  batchId     String
+  packageId   String?
+  rowNumber   Int
+  orderNumber String?
+  barcode     String?
+  status      ImportDetailStatus
+  message     String?
+  createdAt   DateTime           @default(now())
+
+  batch   ImportBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  package Package?    @relation(fields: [packageId], references: [id], onDelete: SetNull)
+
+  @@unique([batchId, rowNumber])
+  @@index([packageId])
+  @@index([status])
+}
+
+// ==========================================
+// SCAN HISTORIES
+// ==========================================
+
+model ScanHistory {
+  id                   String     @id @default(cuid())
+  userId               String
+  packageId            String?
+  storeId              String?
+  selectedExpeditionId String?
+  detectedExpeditionId String?
+  scannedBarcode       String
+  mode                 ScanMode
+  result               ScanResult
+  message              String?
+  scannedAt            DateTime   @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+
+  package Package? @relation(fields: [packageId], references: [id], onDelete: SetNull)
+  store   Store?   @relation(fields: [storeId], references: [id], onDelete: SetNull)
+
+  selectedExpedition Expedition? @relation("SelectedExpedition", fields: [selectedExpeditionId], references: [id], onDelete: SetNull)
+  detectedExpedition Expedition? @relation("DetectedExpedition", fields: [detectedExpeditionId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([packageId])
+  @@index([storeId])
+  @@index([scannedAt])
+  @@index([result])
 }
