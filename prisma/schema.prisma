@@ -7,9 +7,9 @@ datasource db {
   provider = "postgresql"
 }
 
-// ==========================================
-// ENUMS
-// ==========================================
+// ================================
+// ENUM
+// ================================
 
 enum UserRole {
   ADMIN
@@ -17,245 +17,179 @@ enum UserRole {
   SELLER
 }
 
-enum PackageStatus {
-  WAITING_RES
-  REGISTERED
-  SORTED
+enum PackageScanStatus {
+  BELUM_DISCAN
+  SUDAH_DISCAN
 }
 
-enum ImportBatchStatus {
-  PROCESSING
-  COMPLETED
-  COMPLETED_WITH_ERRORS
-  FAILED
+enum PackageCondition {
+  NORMAL
+  PENDING
+  BATAL
+  DUPLIKAT
+  PREFIX_TIDAK_DIKENAL
 }
 
-enum ImportDetailStatus {
-  IMPORTED
-  UPDATED_RES
-  SKIPPED_SAME
-  SKIPPED_DUPLICATE_FILE
-  CONFLICT_ORDER_RES
-  CONFLICT_RES_USED
-  FAILED_EMPTY_ORDER
-  FAILED_INVALID
-}
-
-enum ScanMode {
-  AUTO
-  MANUAL
+enum SecurityStatus {
+  TIDAK_PERLU
+  PERLU_DIAMANKAN
+  SUDAH_DIAMANKAN
 }
 
 enum ScanResult {
-  SUCCESS
-  UNKNOWN_BARCODE
-  EXPEDITION_MISMATCH
-  PREFIX_UNRECOGNIZED
-  ALREADY_SCANNED
-  FAILED
+  BERHASIL
+  BARCODE_TIDAK_DIKENAL
+  PREFIX_TIDAK_DIKENAL
+  SUDAH_PERNAH_DISCAN
+  PAKET_PENDING
+  PAKET_BATAL
+  PAKET_DUPLIKAT
+  GAGAL
 }
 
-// ==========================================
+// ================================
 // USERS
-// ==========================================
+// ================================
 
 model User {
   id        String   @id @default(cuid())
-  name      String
-  email     String   @unique
+  nama      String
+  username  String   @unique
   password  String
-  role      UserRole @default(SELLER)
+  role      UserRole
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  sellerStores  SellerStore[]
-  importBatches ImportBatch[]
+  managedStores Store[]       @relation("SellerStores")
+  packages      Package[]     @relation("PackageCreatedBy")
   scanHistories ScanHistory[]
+
+  @@map("users")
 }
 
-// ==========================================
+// ================================
 // MARKETPLACES
-// ==========================================
+// ================================
 
 model Marketplace {
   id        String   @id @default(cuid())
-  name      String   @unique
+  nama      String   @unique
   createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   stores Store[]
+
+  @@map("marketplaces")
 }
 
-// ==========================================
+// ================================
 // STORES
-// ==========================================
+// ================================
 
 model Store {
   id            String   @id @default(cuid())
   marketplaceId String
-  name          String
+  sellerId      String
+  nama          String
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
-  marketplace   Marketplace   @relation(fields: [marketplaceId], references: [id])
-  sellerStores  SellerStore[]
-  packages      Package[]
-  importBatches ImportBatch[]
-  scanHistories ScanHistory[]
+  marketplace Marketplace @relation(fields: [marketplaceId], references: [id], onDelete: Restrict)
+  seller      User        @relation("SellerStores", fields: [sellerId], references: [id], onDelete: Restrict)
+  packages    Package[]
 
-  @@unique([marketplaceId, name])
-  @@index([marketplaceId])
+  @@unique([marketplaceId, nama])
+  @@index([sellerId])
+  @@map("stores")
 }
 
-// ==========================================
-// SELLER STORE ASSIGNMENTS
-// ==========================================
-
-model SellerStore {
-  userId    String
-  storeId   String
-  createdAt DateTime @default(now())
-
-  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
-  store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
-
-  @@id([userId, storeId])
-  @@index([storeId])
-}
-
-// ==========================================
+// ================================
 // EXPEDITIONS
-// ==========================================
+// ================================
 
 model Expedition {
   id        String   @id @default(cuid())
-  name      String   @unique
+  nama      String   @unique
   createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   prefixRules PrefixRule[]
   packages    Package[]
 
-  selectedScans ScanHistory[] @relation("SelectedExpedition")
-  detectedScans ScanHistory[] @relation("DetectedExpedition")
+  @@map("expeditions")
 }
 
-// ==========================================
+// ================================
 // PREFIX RULES
-// ==========================================
+// ================================
 
 model PrefixRule {
   id           String   @id @default(cuid())
   expeditionId String
-  prefix       String   @unique
+  awalan       String?
+  akhiran      String?
+  panjang      Int?
   createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   expedition Expedition @relation(fields: [expeditionId], references: [id], onDelete: Cascade)
 
   @@index([expeditionId])
+  @@map("prefix_rules")
 }
 
-// ==========================================
+// ================================
 // PACKAGES
-// ==========================================
+// ================================
 
 model Package {
-  id           String        @id @default(cuid())
-  storeId      String
-  expeditionId String?
-  orderNumber  String
-  barcode      String?       @unique
-  status       PackageStatus @default(WAITING_RES)
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
+  id               String            @id @default(cuid())
+  storeId          String
+  expeditionId     String?
+  createdById      String?
+  nomorPesanan     String
+  barcode          String?           @unique
+  statusScan       PackageScanStatus @default(BELUM_DISCAN)
+  statusPaket      PackageCondition  @default(NORMAL)
+  statusPengamanan SecurityStatus    @default(TIDAK_PERLU)
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
 
-  store      Store       @relation(fields: [storeId], references: [id])
-  expedition Expedition? @relation(fields: [expeditionId], references: [id])
+  store      Store       @relation(fields: [storeId], references: [id], onDelete: Restrict)
+  expedition Expedition? @relation(fields: [expeditionId], references: [id], onDelete: SetNull)
+  createdBy  User?       @relation("PackageCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
 
-  importDetails ImportBatchDetail[]
   scanHistories ScanHistory[]
 
-  @@unique([storeId, orderNumber])
-  @@index([storeId])
+  @@unique([storeId, nomorPesanan])
   @@index([expeditionId])
-  @@index([status])
+  @@index([statusScan])
+  @@index([statusPaket])
+  @@index([statusPengamanan])
+  @@map("packages")
 }
 
-// ==========================================
-// IMPORT BATCHES
-// ==========================================
-
-model ImportBatch {
-  id           String            @id @default(cuid())
-  userId       String
-  storeId      String
-  fileName     String
-  totalRows    Int               @default(0)
-  totalSuccess Int               @default(0)
-  totalFailed  Int               @default(0)
-  totalSkipped Int               @default(0)
-  status       ImportBatchStatus @default(PROCESSING)
-  createdAt    DateTime          @default(now())
-  finishedAt   DateTime?
-
-  user    User                @relation(fields: [userId], references: [id])
-  store   Store               @relation(fields: [storeId], references: [id])
-  details ImportBatchDetail[]
-
-  @@index([userId])
-  @@index([storeId])
-  @@index([createdAt])
-}
-
-// ==========================================
-// IMPORT BATCH DETAILS
-// ==========================================
-
-model ImportBatchDetail {
-  id          String             @id @default(cuid())
-  batchId     String
-  packageId   String?
-  rowNumber   Int
-  orderNumber String?
-  barcode     String?
-  status      ImportDetailStatus
-  message     String?
-  createdAt   DateTime           @default(now())
-
-  batch   ImportBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
-  package Package?    @relation(fields: [packageId], references: [id], onDelete: SetNull)
-
-  @@unique([batchId, rowNumber])
-  @@index([packageId])
-  @@index([status])
-}
-
-// ==========================================
+// ================================
 // SCAN HISTORIES
-// ==========================================
+// ================================
 
 model ScanHistory {
-  id                   String     @id @default(cuid())
-  userId               String
-  packageId            String?
-  storeId              String?
-  selectedExpeditionId String?
-  detectedExpeditionId String?
-  scannedBarcode       String
-  mode                 ScanMode
-  result               ScanResult
-  message              String?
-  scannedAt            DateTime   @default(now())
-
-  user User @relation(fields: [userId], references: [id])
+  id               String            @id @default(cuid())
+  packageId        String?
+  userId           String
+  barcode          String
+  hasilScan        ScanResult
+  statusPaket      PackageCondition?
+  statusPengamanan SecurityStatus?
+  keterangan       String?
+  scannedAt        DateTime          @default(now())
 
   package Package? @relation(fields: [packageId], references: [id], onDelete: SetNull)
-  store   Store?   @relation(fields: [storeId], references: [id], onDelete: SetNull)
+  user    User     @relation(fields: [userId], references: [id], onDelete: Restrict)
 
-  selectedExpedition Expedition? @relation("SelectedExpedition", fields: [selectedExpeditionId], references: [id], onDelete: SetNull)
-  detectedExpedition Expedition? @relation("DetectedExpedition", fields: [detectedExpeditionId], references: [id], onDelete: SetNull)
-
-  @@index([userId])
   @@index([packageId])
-  @@index([storeId])
+  @@index([userId])
+  @@index([barcode])
   @@index([scannedAt])
-  @@index([result])
+  @@map("scan_histories")
 }
