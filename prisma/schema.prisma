@@ -63,6 +63,7 @@ model User {
   managedStores Store[]       @relation("SellerStores")
   packages      Package[]     @relation("PackageCreatedBy")
   scanHistories ScanHistory[]
+  sessions      Session[]
 
   @@map("users")
 }
@@ -192,4 +193,22 @@ model ScanHistory {
   @@index([barcode])
   @@index([scannedAt])
   @@map("scan_histories")
+}
+
+// ================================
+// SESSION
+// ================================
+
+model Session {
+  id        String   @id @default(cuid())
+  tokenHash String   @unique
+  userId    String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("sessions")
 }
