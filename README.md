@@ -1,5 +1,17 @@
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
+## Pelacakan paket
+
+Fitur pelacakan memakai API BinderByte. Atur `PACKAGE_TRACKING_API_KEY`
+sebagai environment variable pada server (atau di `.env.local` untuk
+pengembangan lokal). Jangan memakai API key yang pernah dibagikan di chat;
+cabut key tersebut dan buat key baru dari dashboard BinderByte. Key hanya
+digunakan oleh route server dan tidak dikirim ke browser.
+
+Tombol **Lacak paket** tersedia di detail paket untuk Admin dan Seller. Resi
+harus sudah terisi dan ekspedisi paket harus memiliki kode yang didukung oleh
+integrasi.
+
 ## Getting Started
 
 First, run the development server:

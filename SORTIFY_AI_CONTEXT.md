@@ -250,9 +250,21 @@ Jika tidak ada aturan yang cocok, ekspedisi tidak boleh ditebak.
 
 ------------------------------------------------------------------------
 
-## 6. Aturan import Excel/CSV
+## 6. Aturan import paket
 
 ### 6.1 Format file
+
+Keputusan implementasi awal yang telah disetujui:
+
+-   Hanya workbook `.xlsx` yang diterima; `.xls` dan `.csv` belum
+    didukung.
+-   Ukuran file maksimal 5 MB dan maksimal 5.000 baris data, tidak
+    termasuk header.
+-   Header `Nomor Pesanan` dan `Resi` wajib tersedia tepat satu kali.
+    Huruf besar/kecil dan spasi berulang pada header dinormalisasi.
+-   Nilai nomor pesanan dan resi harus disimpan sebagai teks agar angka
+    nol di awal tidak hilang. Resi dipertahankan apa adanya; spasi di
+    awal atau akhir resi membuat baris tidak valid.
 
 File import berisi dua kolom utama:
 
@@ -410,7 +422,8 @@ Ketentuan bisnis:
 -   Setelah selesai, Petugas dapat mengubah status menjadi
     `SUDAH_DIAMANKAN`.
 -   Jangan otomatis menandai paket sudah diamankan tanpa konfirmasi
-    tindakan.
+    tindakan, kecuali hasil scan `PAKET_DUPLIKAT` yang mengikuti
+    keputusan khusus pada bagian 8.5.
 -   Perubahan status harus divalidasi berdasarkan role dan dicatat bila
     dibutuhkan untuk audit.
 
@@ -506,6 +519,38 @@ Jika scan menyebabkan perubahan paket dan pembuatan riwayat,
 pertimbangkan transaksi agar hasilnya konsisten. Pastikan kegagalan
 transaksi tidak meninggalkan status paket yang berubah tanpa riwayat
 yang semestinya.
+
+### 8.5 Keputusan kebijakan scan
+
+Keputusan implementasi yang telah disetujui:
+
+-   Barcode di-trim pada spasi awal/akhir sebelum exact match. Huruf besar
+    atau kecil dan karakter lain tidak diubah.
+-   Paket normal yang sudah pernah berhasil discan menghasilkan
+    `SUDAH_PERNAH_DISCAN`; status paket tidak berubah, tetapi percobaan
+    tetap dicatat.
+-   Paket `PENDING` atau `BATAL` menghasilkan hasil scan yang sesuai dan
+    status pengamanan diubah menjadi `PERLU_DIAMANKAN`.
+-   Jika paket yang sebelumnya berhasil discan kemudian berstatus
+    `PENDING` atau `BATAL`, halaman scan Petugas yang pernah berhasil
+    memindainya menampilkan peringatan selama kondisi tersebut masih
+    berlaku.
+-   Paket `DUPLIKAT` menghasilkan `PAKET_DUPLIKAT` dan status pengamanan
+    `PERLU_DIAMANKAN`; status berubah menjadi `SUDAH_DIAMANKAN` hanya
+    setelah Petugas mengonfirmasi tindakan pengamanan fisik.
+-   Petugas hanya dapat melihat riwayat scan miliknya. Admin dapat
+    melihat riwayat global.
+-   Admin dapat mengubah kondisi paket. Kondisi `PENDING`, `BATAL`, dan
+    `DUPLIKAT` otomatis memerlukan pengamanan. Jika Admin mengubah salah
+    satu kondisi tersebut kembali ke `NORMAL`, pengamanan di-reset ke
+    `TIDAK_PERLU`.
+-   Seller dapat mengisi barcode yang masih kosong milik toko yang
+    ditugaskan kepadanya; barcode yang sudah terisi tidak dapat ditimpa.
+-   Petugas dapat mengubah pengamanan dari `PERLU_DIAMANKAN` menjadi
+    `SUDAH_DIAMANKAN` setelah konfirmasi tindakan fisik.
+-   Penghapusan paket tidak tersedia.
+-   Peringatan pending/batal ditampilkan pada halaman scan saat halaman
+    dimuat atau diperbarui; implementasi ini bukan push notification.
 
 ------------------------------------------------------------------------
 
@@ -795,6 +840,13 @@ sekaligus.
 -   Proteksi route.
 -   Role-based access control.
 -   Setup Admin awal dengan cara aman.
+-   **Sudah diimplementasikan:** profil menampilkan identitas akun aktif,
+    dan pengguna dapat mengganti password dengan verifikasi password saat
+    ini. Perubahan mencabut sesi lain, tetapi mempertahankan sesi yang
+    sedang digunakan.
+-   **Sudah diimplementasikan:** tes regresi otomatis untuk validasi
+    filter laporan, master data, dan penggantian password, dijalankan
+    dengan `npm test`.
 
 ### Tahap 3 --- Master data
 
@@ -806,7 +858,14 @@ Urutan yang disarankan:
 4.  Ekspedisi.
 5.  Aturan prefix.
 
-Pastikan validasi role dan kepemilikan toko berjalan.
+**Sudah diimplementasikan:** halaman master data Admin membaca database
+dan mendukung tambah/edit marketplace, toko, Seller, ekspedisi, aturan
+prefix, serta pengguna. Penghapusan master data tidak tersedia agar
+relasi dan riwayat operasional tetap terjaga. Validasi server mencegah
+penugasan toko ke akun non-Seller dan perubahan role Seller selama akun
+tersebut masih memiliki toko. Perubahan role akun Admin yang sedang
+digunakan juga dicegah. Saat Admin mengganti password, semua sesi
+pengguna tersebut dicabut.
 
 ### Tahap 4 --- Import paket
 
@@ -842,13 +901,19 @@ Pastikan validasi role dan kepemilikan toko berjalan.
 
 ### Tahap 7 --- Dashboard dan laporan
 
--   Statistik paket.
--   Statistik scan.
--   Paket belum discan.
--   Paket bermasalah.
--   Paket yang perlu diamankan.
--   Filter berdasarkan toko, marketplace, ekspedisi, status, dan rentang
-    tanggal sesuai hak akses.
+-   **Sudah diimplementasikan:** dashboard Admin, Seller, dan Petugas
+    memakai statistik dari database dan menampilkan aktivitas scan
+    terbaru sesuai hak akses.
+-   **Sudah diimplementasikan:** total paket, paket yang sudah discan,
+    paket yang perlu diamankan, distribusi kondisi paket, hasil scan,
+    dan tren scan tujuh hari dalam zona waktu WIB. Data Seller dibatasi
+    ke toko miliknya; data Petugas dibatasi ke riwayat scan pribadinya.
+-   **Sudah diimplementasikan:** filter laporan Admin dan Seller
+    berdasarkan toko, marketplace, ekspedisi, kondisi paket, dan rentang
+    tanggal. Seller hanya dapat memilih toko dan marketplace miliknya.
+-   **Sudah diimplementasikan:** ekspor `.xlsx` mengikuti filter aktif,
+    dengan sheet ringkasan, paket, dan riwayat scan. Ekspor dibatasi
+    50.000 baris per sheet; perkecil filter bila melewati batas.
 
 ------------------------------------------------------------------------
 
@@ -860,18 +925,12 @@ diperiksa, jangan mengarang hal berikut:
 -   Nama lengkap semua halaman dan menu.
 -   Desain final dashboard.
 -   Kebijakan masa berlaku session.
--   Apakah Petugas dapat melihat semua riwayat scan atau hanya miliknya.
 -   Apakah Seller dapat mengedit atau menghapus paket setelah import.
 -   Apakah paket boleh dihapus permanen atau hanya diarsipkan.
--   Apakah scan ulang paket normal harus ditolak atau dicatat sebagai
-    scan berulang.
--   Detail aturan normalisasi barcode.
 -   Prioritas jika pola prefix saling tumpang tindih.
--   Batas ukuran file import dan jumlah baris maksimal.
--   Format file Excel/CSV tambahan di luar dua kolom utama.
 -   Fitur ekspor laporan.
 -   Integrasi API eksternal.
--   Fitur notifikasi.
+-   Kanal notifikasi selain peringatan di halaman scan.
 -   Deployment dan hosting produksi.
 
 Jika suatu keputusan diperlukan agar implementasi dapat dilanjutkan,
